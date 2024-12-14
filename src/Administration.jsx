@@ -36,7 +36,8 @@ export default function Administration() {
   }, []);
 
   function onPrint(id_predmet, id_trida, id_cviceni) {
-    window.open('/' + id_predmet + '/' + id_trida + '/' + id_cviceni + '/print', '_blank')
+    let param = id_predmet == "matematika" && id_trida == 1 && 49 <= id_cviceni ? "?axis=1" : ""
+    window.open('/' + id_predmet + '/' + id_trida + '/' + id_cviceni + '/print' + param, '_blank')
   }
 
   // ===
