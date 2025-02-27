@@ -183,7 +183,12 @@ main {
   margin-bottom: 2ex;
 }
 #print div {
-  margin-top: 1.6ex;
+  margin-top: 1.5ex;
+}
+#print #axis {
+  margin-top: 2.5ex;
+  width: 100%;
+  height: auto;
 }
 
 @media not screen and (orientation: portrait) and (max-width: 800px) {
