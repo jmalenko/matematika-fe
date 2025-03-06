@@ -7,6 +7,14 @@ main {
   user-select: none;
 }
 
+.loading {
+  color: blue;
+}
+
+.error {
+  color: red;
+}
+
 #zadani {
   font-size: 17vw;
   text-align: center;

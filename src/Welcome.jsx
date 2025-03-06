@@ -2,14 +2,18 @@ import {useState, useEffect} from "react";
 import {useNavigate} from 'react-router-dom';
 import {useLocalStorage} from "./useLocalStorage.js";
 import {doneContains} from "./shared.js";
+import useFetch from './useFetch.js';
 
 export default function Welcome() {
-  const [seznamTridy, setSeznamTridy] = useState();
-  const [seznamCviceni, setSeznamCviceni] = useState();
-
   const [predmet, setPredmet] = useState("matematika");
   const [trida, setTrida] = useState();
   const [cviceni, setCviceni] = useState();
+
+  const {data: dataTridy, loading: loadingTridy, error: errorTridy, myFetch: myFetchTridy} =
+    useFetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/seznam_tridy');
+
+  const {data: dataCviceni, loading: loadingCviceni, error: errorCviceni, myFetch: myFetchCviceni} =
+    useFetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/seznam_cviceni/' + trida, false);
 
   const [firstLoad, setFirstLoad] = useState(true);
 
@@ -18,37 +22,24 @@ export default function Welcome() {
   const [done, setDone] = useLocalStorage("done", JSON.stringify([]));
   const [next, setNext] = useLocalStorage("next", JSON.stringify({}));
 
-  // console.debug("Done: " + JSON.stringify(done));
-  // console.debug("Next: predmet=" + next.predmet + ", trida=" + next.trida + ", cviceni=" + next.cviceni);
+  useEffect(() => {
+    // Set Trida that's next. next is set upon completion of a Cviceni.
+    dataTridy && setTrida(firstLoad && next && next.hasOwnProperty('trida')
+      ? next.trida
+      : Object.keys(dataTridy)[0]);
+  }, [dataTridy, loadingTridy]);
 
   useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/seznam_tridy')
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        // console.debug("Data: " + JSON.stringify(data));
-        setSeznamTridy(data);
-        setTrida(firstLoad && next && next.hasOwnProperty('trida')
-          ? next.trida
-          : Object.keys(data)[0]);
-      });
-  }, []);
-
-  useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/seznam_cviceni/' + (trida || 1))
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        // console.debug("Data: " + JSON.stringify(data));
-        setSeznamCviceni(data);
-        setCviceni((firstLoad && next && next.hasOwnProperty('cviceni')) || next.trida === trida
-          ? next.cviceni
-          : Object.keys(data)[0]);
-        setFirstLoad(false);
-      });
+    trida && myFetchCviceni();
   }, [trida]);
+
+  useEffect(() => {
+    // Set Cviceni that's next. next is set upon completion of a Cviceni.
+    dataCviceni && setCviceni((firstLoad && next && next.hasOwnProperty('cviceni')) || next.trida === trida
+      ? next.cviceni
+      : Object.keys(dataCviceni)[0]);
+    setFirstLoad(false);
+  }, [dataCviceni, loadingCviceni]);
 
   function onStart() {
     navigate("/" + predmet + "/" + trida + "/" + cviceni)
@@ -79,27 +70,36 @@ export default function Welcome() {
         <tr>
           <td><label>Třída:</label></td>
           <td>
-            <select onChange={onChangeTrida} value={trida}>{
-              seznamTridy !== undefined && Object.keys(seznamTridy).map(id => (
-                <option key={id} value={id}>{seznamTridy[id]}</option>))
-            }</select>
+            {dataTridy &&
+              <select onChange={onChangeTrida} value={trida}>{
+                Object.keys(dataTridy).map(id => (
+                  <option key={id} value={id}>{dataTridy[id]}</option>))
+              }</select>
+            }
+            {loadingTridy && <p className="loading">Nahrávám...</p>}
+            {errorTridy && <p className="error">Chyba: {errorTridy.message}</p>}
           </td>
         </tr>
 
         <tr>
           <td><label>Cvičení:</label></td>
           <td>
-            <select onChange={onChangeCviceni} value={cviceni}>{
-              seznamCviceni !== undefined && Object.keys(seznamCviceni).map(id => {
-                  let passed = doneContains(done, {predmet: predmet, trida: trida, cviceni: id});
-                  let className = passed ? "passed" : "";
-                  let mark = passed ? " ✔" : "" // For: 1. Accessibility, 2. Firefox and Chrome Mobile don't set the background with pure CSS (only programmatically)
-                  return (
-                    <option key={id} value={id} className={className}>{id}: {seznamCviceni[id]}{mark}</option>
-                  )
-                }
-              )
-            }</select>
+            {dataCviceni && (
+              <select onChange={onChangeCviceni} value={cviceni}>{
+                Object.keys(dataCviceni).map(id => {
+                    let passed = doneContains(done, {predmet: predmet, trida: trida, cviceni: id});
+                    let className = passed ? "passed" : "";
+                    let mark = passed ? " ✔" : "" // For: 1. Accessibility, 2. Firefox and Chrome Mobile don't set the background with pure CSS (only programmatically)
+                    return (
+                      <option key={id} value={id} className={className}>{id}: {dataCviceni[id]}{mark}</option>
+                    )
+                  }
+                )
+              }
+              </select>
+            )}
+            {loadingCviceni && <p className="loading">Nahrávám...</p>}
+            {errorCviceni && <p className="error">Chyba: {errorCviceni.message}</p>}
           </td>
         </tr>
 
