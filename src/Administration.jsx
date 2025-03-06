@@ -2,6 +2,7 @@ import {useNavigate} from 'react-router-dom';
 import {useLocalStorage} from "./useLocalStorage.js";
 import {useEffect, useState} from "react";
 import Log from "./Log.jsx";
+import useFetch from "./useFetch.js";
 
 export default function Administration() {
 
@@ -23,17 +24,8 @@ export default function Administration() {
 
   // ===
 
-  const [seznam, setSeznam] = useState({});
-
-  useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + 'api/seznam')
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        setSeznam(data);
-      })
-  }, []);
+  const {data: dataSeznam, loading: loadingSeznam, error: errorSeznam, myFetch: myFetchSeznam} =
+    useFetch(import.meta.env.VITE_API_BASE_URL + 'api/seznam');
 
   function onPrint(id_predmet, id_trida, id_cviceni) {
     let param = id_predmet == "matematika" && id_trida == 1 && 49 <= id_cviceni ? "?axis=1" : ""
@@ -50,11 +42,11 @@ export default function Administration() {
         <h4>Administrace</h4>
 
         <h4>Seznam cvičení</h4>
-        <Seznam seznam={seznam} onPrint={onPrint}/>
+        <Seznam seznam={dataSeznam} loading={loadingSeznam} error={errorSeznam} onPrint={onPrint}/>
 
         <h4>Log</h4>
         Log má {log.length} položek.
-        <button onClick={onClearLocalStorage}>Clear localStorage</button>
+        <button onClick={onClearLocalStorage}>Clear Local Storage</button>
         <Log log={log}/>
       </div>
     </>
@@ -72,38 +64,43 @@ function ButtonHome({onHome}) {
   );
 }
 
-function Seznam({seznam, onPrint}) {
+function Seznam({seznam, loading, error, onPrint}) {
   return (
-    <table className="mytablestyle">
-      <thead>
-      <tr>
-        <th>Předmět</th>
-        <th>Třída</th>
-        <th>Cvičení</th>
-        <th></th>
-      </tr>
-      </thead>
-      <tbody>
-      {Object.keys(seznam).map(id_predmet => {
-        const predmet = seznam[id_predmet];
-        return Object.keys(predmet.tridy).map(id_trida => {
-          const trida = predmet.tridy[id_trida];
-          return Object.keys(trida.cviceni).map(id_cviceni => {
-            const zadani = trida.cviceni[id_cviceni];
-            return (
-              <tr key={id_predmet + ":" + id_trida + ":" + id_cviceni}>
-                <td>{id_predmet}: {predmet.nazev_predmet}</td>
-                <td>{id_trida}: {trida.nazev_trida}</td>
-                <td>{id_cviceni}: {zadani.nazev_zadani}</td>
-                <td>
-                  <button onClick={() => onPrint(id_predmet, id_trida, id_cviceni)}>Tisk</button>
-                </td>
-              </tr>
-            )
-          })
-        })
-      })}
-      </tbody>
-    </table>
+    <>
+      {seznam && (
+        <table className="mytablestyle">
+          <thead>
+          <tr>
+            <th>Předmět</th>
+            <th>Třída</th>
+            <th>Cvičení</th>
+            <th></th>
+          </tr>
+          </thead>
+          <tbody>
+          {seznam && Object.keys(seznam).map(id_predmet => {
+            const predmet = seznam[id_predmet];
+            return Object.keys(predmet.tridy).map(id_trida => {
+              const trida = predmet.tridy[id_trida];
+              return Object.keys(trida.cviceni).map(id_cviceni => {
+                const zadani = trida.cviceni[id_cviceni];
+                return (
+                  <tr key={id_predmet + ":" + id_trida + ":" + id_cviceni}>
+                    <td>{id_predmet}: {predmet.nazev_predmet}</td>
+                    <td>{id_trida}: {trida.nazev_trida}</td>
+                    <td>{id_cviceni}: {zadani.nazev_zadani}</td>
+                    <td>
+                      <button onClick={() => onPrint(id_predmet, id_trida, id_cviceni)}>Tisk</button>
+                    </td>
+                  </tr>
+                )
+              })
+            })
+          })}
+          </tbody>
+        </table>)}
+      {loading && <p className="loading">Nahrávám...</p>}
+      {error && <p className="error">Chyba: {error.message}</p>}
+    </>
   );
 }

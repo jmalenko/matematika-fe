@@ -23,23 +23,27 @@ export default function Welcome() {
   const [next, setNext] = useLocalStorage("next", JSON.stringify({}));
 
   useEffect(() => {
+    if (dataTridy != null) return;
+
     // Set Trida that's next. next is set upon completion of a Cviceni.
-    dataTridy && setTrida(firstLoad && next && next.hasOwnProperty('trida')
+     setTrida(firstLoad && next && next.hasOwnProperty('trida')
       ? next.trida
       : Object.keys(dataTridy)[0]);
-  }, [dataTridy, loadingTridy]);
+  }, [dataTridy]);
 
   useEffect(() => {
     trida && myFetchCviceni();
   }, [trida]);
 
   useEffect(() => {
+    if (dataCviceni != null) return;
+
     // Set Cviceni that's next. next is set upon completion of a Cviceni.
-    dataCviceni && setCviceni((firstLoad && next && next.hasOwnProperty('cviceni')) || next.trida === trida
+    setCviceni((firstLoad && next && next.hasOwnProperty('cviceni')) || next.trida === trida
       ? next.cviceni
       : Object.keys(dataCviceni)[0]);
     setFirstLoad(false);
-  }, [dataCviceni, loadingCviceni]);
+  }, [dataCviceni]);
 
   function onStart() {
     navigate("/" + predmet + "/" + trida + "/" + cviceni)

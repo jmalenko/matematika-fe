@@ -3,6 +3,7 @@ import {useNavigate, useParams} from 'react-router-dom';
 import {useLocalStorage} from "./useLocalStorage";
 import {doneContains, dataToString} from "./shared.js";
 import Log from "./Log.jsx";
+import useFetch from "./useFetch.js";
 
 export default function MathPractice() {
   const EMPTY = "";
@@ -25,34 +26,36 @@ export default function MathPractice() {
   const state = useRef(STATE_LOADING);
   const exerciseNextRef = useRef();
 
+  const [predmet, setPredmet] = useState("matematika");
+  let {trida} = useParams();
+  let {cviceni} = useParams();
+
   const [exercise, setExercise] = useState();
-  const [answer, setAnswer] = useState(); // string
+  const {data: dataExercise, loading: loadingExercise, error: errorExercise, myFetch: myFetchExercise} =
+    useFetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/' + trida + '/' + cviceni);
+  const [answer, setAnswer] = useState(); // answer entered by user, string
+
+  const {data: dataCviceniInfo, loading: loadingCviceniInfo, error: errorCviceniInfo, myFetch: myFetchCviceniInfo} =
+    useFetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/info_cviceni/' + trida + '/' + cviceni);
+
+  const [dataCviceniInfoPrev, setDataCviceniInfoPrev] = useState();
 
   const [exerciseNext, setExerciseNext] = useState();
 
   const [menuVisible, setMenuVisible] = useState(false);
   const [incorrectAnswers, setIncorrectAnswers] = useState(); // Incorrect answers for the current exercise
   const [timeFrom, setTimeFrom] = useState();
-  const [history, setHistory] = useState([]);
+  const [history, setHistory] = useState();
 
   const [message, setMessage] = useState();
-
-  const [predmet, setPredmet] = useState("matematika");
-  let {trida} = useParams();
-  let {cviceni} = useParams();
 
   const [cviceniInfo, setCviceniInfo] = useState();
 
   let navigate = useNavigate();
-  let fetchAbortController;
 
   const [log, setLog] = useLocalStorage("log", []);
   const [done, setDone] = useLocalStorage("done", []); // Set stored as array
   const [next, setNext] = useLocalStorage("next", {}); // TODO Consider getting next from done (as the first item that's not done)
-
-  useEffect(() => {
-    fetchExercise(cviceni);
-  }, [exercise]);
 
   useEffect(() => {
     setLog(log => [...log, {
@@ -82,71 +85,48 @@ export default function MathPractice() {
     };
   }, []);
 
-  function fetchExercise(cviceni_) {
-    if (fetchAbortController) {
-      console.error('Logical error: The next fetch must not happen before the current ends.');
-    }
-
-    fetchAbortController = new AbortController();
-    fetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/' + trida + '/' + cviceni_, {signal: fetchAbortController.signal})
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        if (state.current == STATE_LOADING) { // 1st exercise
-          if (import.meta.env.DEV)
-            console.debug("Data: " + JSON.stringify(data));
-          console.log("New exercise: " + dataToString(data));
-          state.current = STATE_THINKING;
-          setExercise(data);
-          setAnswer(EMPTY);
-          setIncorrectAnswers([]);
-          const now = new Date();
-          setTimeFrom(now);
-
-          // Trim log
-          if (LOG_MAX_LENGTH < log.length) {
-            setLog(log => log.slice(-LOG_MAX_LENGTH));
-          }
-
-          setLog(log => [...log, {
-            timestamp: now.valueOf(),
-            predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
-            trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
-            cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
-            event: "Nový příklad",
-            exercise: dataToString(data),
-            answerExpected: "",
-            answerActual: "",
-            correctIndicator: "",
-            duration: ""
-          }]);
-        } else { // use this exercise after the current exercise
-          if (import.meta.env.DEV)
-            console.debug("Data: " + JSON.stringify(data));
-          console.log("Next exercise: " + dataToString(data));
-          setExerciseNext(data);
-        }
-      })
-      .catch(err => {
-        if (err.name === 'AbortError') {
-          console.debug('Fetch request was canceled');
-        } else {
-          throw err;
-        }
-      })
-  }
-
   useEffect(() => {
-    fetch(import.meta.env.VITE_API_BASE_URL + 'api/' + predmet + '/info_cviceni/' + trida + '/' + cviceni)
-      .then((res) => {
-        return res.json();
-      })
-      .then((data) => {
-        console.info("Cviceni info: " + JSON.stringify(data));
-        setCviceniInfo(data);
-      });
-  }, [cviceni]);
+    if (dataExercise == null)
+      return;
+
+    if (import.meta.env.DEV)
+      console.debug("Data: " + JSON.stringify(dataExercise));
+
+    if (state.current == STATE_LOADING) { // 1st exercise
+      console.log("New exercise: " + dataToString(dataExercise));
+      state.current = STATE_THINKING;
+      setExercise(dataExercise);
+      setAnswer(EMPTY);
+      setIncorrectAnswers([]);
+      const now = new Date();
+      setTimeFrom(now);
+      setHistory([]);
+
+      // Fetch next exercise
+      myFetchExercise();
+
+      // Trim log
+      if (LOG_MAX_LENGTH < log.length) {
+        setLog(log => log.slice(-LOG_MAX_LENGTH));
+      }
+
+      setLog(log => [...log, {
+        timestamp: now.valueOf(),
+        predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
+        trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
+        cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
+        event: "Nový příklad",
+        exercise: dataToString(dataExercise),
+        answerExpected: "",
+        answerActual: "",
+        correctIndicator: "",
+        duration: ""
+      }]);
+    } else { // use this exercise after the current exercise
+      console.log("Next exercise: " + dataToString(dataExercise));
+      setExerciseNext(dataExercise);
+    }
+  }, [dataExercise]);
 
   useEffect(() => {
     exerciseNextRef.current = exerciseNext;
@@ -164,7 +144,8 @@ export default function MathPractice() {
   }
 
   function onSubmit() {
-    if (state.current != STATE_THINKING) return;
+    if (state.current != STATE_THINKING)
+      return;
     if (answer.length === 0) {
       setMessage("Musíš zadat číslo")
       return
@@ -194,7 +175,7 @@ export default function MathPractice() {
 
       let moveToNextLevel_ = moveToNextLevel(incorrectAnswers);
       if (moveToNextLevel_) {
-        console.log("Next level: " + (cviceniInfo.next_cviceni.end ? "END" : cviceniInfo.next_cviceni.id + ": " + cviceniInfo.next_cviceni.nazev)); // TODO Check that cviceniInfo is set
+        console.log("Next level: " + (dataCviceniInfo.next_cviceni.end ? "END" : dataCviceniInfo.next_cviceni.id + ": " + dataCviceniInfo.next_cviceni.nazev));
 
         let el = {predmet: predmet, trida: trida, cviceni: cviceni};
         if (!doneContains(done, el)) {
@@ -203,10 +184,10 @@ export default function MathPractice() {
 
         setLog(log => [...log, {
           timestamp: now.valueOf(),
-          predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
-          trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
-          cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
-          event: "Další cvičení" + (cviceniInfo.next_cviceni.end ? ", ale už je konec třídy" : ""),
+          predmet: dataCviceniInfo != null ? dataCviceniInfo.nazev_predmet : predmet,
+          trida: trida + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_trida : ""),
+          cviceni: cviceni + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_cviceni : ""),
+          event: "Další cvičení" + (dataCviceniInfo.next_cviceni.end ? ", ale už je konec třídy" : ""),
           exercise: "",
           answerExpected: "",
           answerActual: "",
@@ -214,31 +195,24 @@ export default function MathPractice() {
           duration: ""
         }]);
 
-        if (fetchAbortController)
-          fetchAbortController.abort();
-
-        if (!cviceniInfo.next_cviceni.end) {
-          fetchExercise(cviceniInfo.next_cviceni.id);
-        }
-
         setNext({
           predmet: predmet,
           trida: trida,
-          cviceni: cviceniInfo.next_cviceni.id,
-          end: cviceniInfo.next_cviceni.end
+          cviceni: dataCviceniInfo.next_cviceni.id,
+          end: dataCviceniInfo.next_cviceni.end
         });
       }
-
 
       setTimeout(() => {
         if (moveToNextLevel_) {
           console.debug("Timeout for answer indicator");
-          if (cviceniInfo.next_cviceni.end) { // Check that cviceniInfo is set
+          if (dataCviceniInfo.next_cviceni.end) { // TODO Check that dataCviceniInfo is set
             console.info("This was the last exercise");
             state.current = STATE_END;
             setExerciseNext(null); // set some state variable to force rerender
           } else {
-            navigate("/" + predmet + "/" + trida + "/" + cviceniInfo.next_cviceni.id);
+            setDataCviceniInfoPrev(dataCviceniInfo)
+            navigate("/" + predmet + "/" + trida + "/" + dataCviceniInfo.next_cviceni.id);
             state.current = STATE_LOADING_NEXT;
           }
           return;
@@ -252,11 +226,14 @@ export default function MathPractice() {
           setIncorrectAnswers([]);
           setTimeFrom(new Date());
 
+          // Fetch next exercise
+          myFetchExercise();
+
           setLog(log => [...log, {
             timestamp: Date().valueOf(),
-            predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
-            trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
-            cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
+            predmet: dataCviceniInfo != null ? dataCviceniInfo.nazev_predmet : predmet,
+            trida: trida + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_trida : ""),
+            cviceni: cviceni + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_cviceni : ""),
             event: "Nový příklad",
             exercise: dataToString(exerciseNextRef.current),
             answerExpected: "",
@@ -278,9 +255,9 @@ export default function MathPractice() {
 
       setLog(log => [...log, {
         timestamp: now.valueOf(),
-        predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
-        trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
-        cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
+        predmet: dataCviceniInfo != null ? dataCviceniInfo.nazev_predmet : predmet,
+        trida: trida + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_trida : ""),
+        cviceni: cviceni + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_cviceni : ""),
         event: "Odpověď",
         exercise: dataToString(exercise),
         answerExpected: expectedAnswer,
@@ -332,7 +309,6 @@ export default function MathPractice() {
     let moveToNextLevel = NUMBER_OF_CORRECT_EXERCISES_TO_GET_TO_NEXT_LEVEL <= correct;
     console.debug((moveToNextLevel ? "Move to next level" : "Don't move to next level") + ". Correct " + correct + " out of " + NUMBER_OF_TOTAL_EXERCISES_TO_GET_TO_NEXT_LEVEL + ", min is " + NUMBER_OF_CORRECT_EXERCISES_TO_GET_TO_NEXT_LEVEL + ", summary: " + correctString);
     return moveToNextLevel;
-
   }
 
   function countCorrectInLast() {
@@ -375,12 +351,16 @@ export default function MathPractice() {
       setAnswer(EMPTY);
       setIncorrectAnswers([]);
       setTimeFrom(new Date());
+      setHistory([]);
+
+      // Fetch next exercise
+      myFetchExercise();
 
       setLog(log => [...log, {
         timestamp: Date().valueOf(),
-        predmet: cviceniInfo != null ? cviceniInfo.nazev_predmet : predmet,
-        trida: trida + (cviceniInfo != null ? ": " + cviceniInfo.nazev_trida : ""),
-        cviceni: cviceni + (cviceniInfo != null ? ": " + cviceniInfo.nazev_cviceni : ""),
+        predmet: dataCviceniInfo != null ? dataCviceniInfo.nazev_predmet : predmet,
+        trida: trida + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_trida : ""),
+        cviceni: cviceni + (dataCviceniInfo != null ? ": " + dataCviceniInfo.nazev_cviceni : ""),
         event: "Nový příklad",
         exercise: dataToString(exerciseNextRef.current),
         answerExpected: exerciseNextRef.current.zadani[Number(exerciseNextRef.current.neznama)],
@@ -388,8 +368,6 @@ export default function MathPractice() {
         correctIndicator: "",
         duration: ""
       }]);
-
-      setHistory([]);
     } else {
       state.current = STATE_LOADING;
     }
@@ -472,7 +450,7 @@ export default function MathPractice() {
                    text1=""
                    text2="Nahrávám cvičení..."/>
   ) : state.current == STATE_LOADING_NEXT ? (
-    <GoToNextScreen title={cviceniInfo.next_cviceni.nazev}
+    <GoToNextScreen title={dataCviceniInfoPrev.next_cviceni.nazev}
                     onContinue={onContinue}/>
   ) : state.current == STATE_END ? (
     <EndScreen onRestart={onRestart} onHome={onHome}/>
@@ -523,7 +501,7 @@ function Zadani({exercise, answer, showCorrect, showIncorrect}) {
   const deltaPerUnitLength = -2;
 
   let fontSize = exercise == null ? fontSize1 : (exercise.zadani.length - length1) * deltaPerUnitLength + fontSize1;
-  console.debug("Zadani font-size: " + fontSize);
+  // console.debug("Zadani font-size: " + fontSize);
   const neznamaHeight = fontSize + 3;
   // TODO Other dimensions should be adjusted as well: position of correct/incorrect icons, vertical position of exercise
 
